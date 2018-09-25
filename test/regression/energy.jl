@@ -3,8 +3,8 @@
 
 @testset "energy.jl" begin
 
-download("https://archive.ics.uci.edu/ml/machine-learning-databases/00374/energydata_complete.csv", "energy.csv");
-energy = readcsv("energy.csv");
+download("https://archive.ics.uci.edu/ml/machine-learning-databases/00374/energydata_complete.csv", "../data/energy.csv");
+energy = readcsv("../data/energy.csv");
 
 features = energy[2:end, 3:end];
 labels = float.(energy[2:end, 2]);
