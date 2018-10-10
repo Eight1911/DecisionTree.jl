@@ -27,13 +27,8 @@ end
 _hist(labels::Vector{T}, region::UnitRange{Int} = 1:lastindex(labels)) where T =
     _hist_add!(Dict{T,Int}(), labels, region)
 
-function _weighted_error(actual::Vector, predicted::Vector, weights::Vector{T}) where T <: Real
-    mismatches = actual .!= predicted
-    err = sum(weights[mismatches]) / sum(weights)
-    return err
-end
-
 function majority_vote(labels::Vector)
+
     if length(labels) == 0
         return nothing
     end
@@ -48,7 +43,6 @@ function majority_vote(labels::Vector)
     end
     return top_vote
 end
-
 ### Classification ###
 
 function confusion_matrix(actual::Vector, predicted::Vector)

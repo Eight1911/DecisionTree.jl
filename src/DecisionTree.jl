@@ -57,9 +57,8 @@ mk_rng(seed::T) where T <: Integer = Random.MersenneTwister(seed)
 
 include("measures.jl")
 include("load_data.jl")
-include("util.jl")
-include("classification/main.jl")
-include("regression/main.jl")
+include("tree/main.jl")
+include("ensemble/main.jl")
 include("scikitlearnAPI.jl")
 
 

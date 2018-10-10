@@ -1,6 +1,7 @@
 function load_data(name)
     datasets = ["iris", "adult", "digits"]
-    data_path = joinpath(dirname(pathof(DecisionTree)), "..", "test/data/")
+    # data_path = joinpath(dirname(pathof(DecisionTree)), "..", "test/data/")
+    data_path = "./test/data"
 
     if name == "digits"
         f = open(joinpath(data_path, "digits.csv"))

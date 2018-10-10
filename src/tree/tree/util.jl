@@ -1,7 +1,7 @@
 
 # written by Poom Chiarawongse <eight1911@gmail.com>
 
-module util
+module Util
 
     export gini, entropy, zero_one, q_bi_sort!, hypergeometric
 

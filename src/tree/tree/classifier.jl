@@ -4,23 +4,23 @@
 
 # written by Poom Chiarawongse <eight1911@gmail.com>
 
-module treeregressor
-    include("../util.jl")
-
+module Classifier
+    import ..Util
     import Random
-    export fit
+
+    export _fit
 
     mutable struct NodeMeta{S}
-        l           :: NodeMeta{S}  # right child
-        r           :: NodeMeta{S}  # left child
-        label       :: Float64      # most likely label
-        feature     :: Int          # feature used for splitting
-        threshold   :: S            # threshold value
+        l           :: NodeMeta{S}      # right child
+        r           :: NodeMeta{S}      # left child
+        label       :: Int              # most likely label
+        feature     :: Int              # feature used for splitting
+        threshold   :: S                # threshold value
         is_leaf     :: Bool
         depth       :: Int
-        region      :: UnitRange{Int} # a slice of the samples used to decide the split of the node
-        features    :: Vector{Int}    # a list of features not known to be constant
-        split_at    :: Int            # index of samples
+        region      :: UnitRange{Int}   # a slice of the samples used to decide the split of the node
+        features    :: Vector{Int}      # a list of features not known to be constant
+        split_at    :: Int              # index of samples
         function NodeMeta{S}(features, region, depth) where S
             node = new{S}()
             node.depth = depth
@@ -31,60 +31,55 @@ module treeregressor
         end
     end
 
-    struct Tree{S}
+    struct Tree{S, T}
         root   :: NodeMeta{S}
-        labels :: Vector{Int}
+        list   :: Vector{T} 
+        labels :: Vector{Int}  
     end
 
     # find an optimal split that satisfy the given constraints
     # (max_depth, min_samples_split, min_purity_increase)
     function _split!(
-            X                   :: Matrix{S}, # the feature array
-            Y                   :: Vector{Float64}, # the label array
-            W                   :: Vector{U},
+            X                   :: Matrix{S},   # the feature array
+            Y                   :: Vector{Int}, # the label array
+            W                   :: Vector{U},   # the weight vector
+            purity_function     :: Function,
             node                :: NodeMeta{S}, # the node to split
-            max_features        :: Int, # number of features to consider
-            max_depth           :: Int, # the maximum depth of the resultant tree
-            min_samples_leaf    :: Int, # the minimum number of samples each leaf needs to have
-            min_samples_split   :: Int, # the minimum number of samples in needed for a split
-            min_purity_increase :: Float64, # minimum purity needed for a split
+            max_features        :: Int,         # number of features to consider
+            max_depth           :: Int,         # the maximum depth of the resultant tree
+            min_samples_leaf    :: Int,         # the minimum number of samples each leaf needs to have
+            min_samples_split   :: Int,         # the minimum number of samples in needed for a split
+            min_purity_increase :: Float64,     # minimum purity needed for a split
             indX                :: Vector{Int}, # an array of sample indices,
                                                 # we split using samples in indX[node.region]
-            # the two arrays below are given for optimization purposes
+            # the six arrays below are given for optimization purposes
+            nc                  :: Vector{U},   # nc maintains a dictionary of all labels in the samples
+            ncl                 :: Vector{U},   # ncl maintains the counts of labels on the left
+            ncr                 :: Vector{U},   # ncr maintains the counts of labels on the right
             Xf                  :: Vector{S},
-            Yf                  :: Vector{Float64},
+            Yf                  :: Vector{Int},
             Wf                  :: Vector{U},
             rng                 :: Random.AbstractRNG) where {S, U}
 
         region = node.region
         n_samples = length(region)
-        r_start = region.start - 1
+        n_classes = length(nc)
 
-        @inbounds @simd for i in 1:n_samples
-            Yf[i] = Y[indX[i + r_start]]
-            Wf[i] = W[indX[i + r_start]]
+        nc[:] .= zero(U)
+        @simd for i in region
+            @inbounds nc[Y[indX[i]]] += W[indX[i]]
         end
-
-        tssq = zero(U)
-        tsum = zero(U)
-        wsum = zero(U)
-        @inbounds @simd for i in 1:n_samples
-            tssq += Wf[i]*Yf[i]*Yf[i]
-            tsum += Wf[i]*Yf[i]
-            wsum += Wf[i]
-        end
-
-        node.label =  tsum / wsum
+        nt = sum(nc)
+        node.label = argmax(nc)
         if (min_samples_leaf * 2 >  n_samples
          || min_samples_split    >  n_samples
          || max_depth            <= node.depth
-          # equivalent to old_purity > -1e-7
-         || tsum * node.label    > -1e-7 * wsum + tssq)
-            # TODO : Add Wf[1:n_samples] to this thing
+         || nc[node.label]       == nt)
             node.is_leaf = true
             return
         end
 
+        r_start = region.start - 1
         features = node.features
         n_features = length(features)
         best_purity = typemin(U)
@@ -94,48 +89,45 @@ module treeregressor
 
         indf = 1
         # the number of new constants found during this split
-        n_constant = 0
+        n_const = 0
         # true if every feature is constant
         unsplittable = true
         # the number of non constant features we will see if
         # only sample n_features used features
         # is a hypergeometric random variable
         total_features = size(X, 2)
-
         # this is the total number of features that we expect to not
         # be one of the known constant features. since we know exactly
-        # what the non constant features are, we can sample at 'non_constants_used'
+        # what the non constant features are, we can sample at 'non_consts_used'
         # non constant features instead of going through every feature randomly.
-        non_constants_used = util.hypergeometric(n_features, total_features-n_features, max_features, rng)
-        @inbounds while (unsplittable || indf <= non_constants_used) && indf <= n_features
+        non_consts_used = Util.hypergeometric(n_features, total_features-n_features, max_features, rng)
+        @inbounds while (unsplittable || indf <= non_consts_used) && indf <= n_features
             feature = let
                 indr = rand(rng, indf:n_features)
                 features[indf], features[indr] = features[indr], features[indf]
                 features[indf]
             end
 
-            rssq = tssq
-            lssq = zero(U)
-            rsum = tsum
-            lsum = zero(U)
-
+            # in the begining, every node is
+            # on right of the threshold
+            ncl[:] .= zero(U)
+            ncr[:] = nc
             @simd for i in 1:n_samples
                 Xf[i] = X[indX[i + r_start], feature]
             end
 
             # sort Yf and indX by Xf
-            util.q_bi_sort!(Xf, indX, 1, n_samples, r_start)
+            Util.q_bi_sort!(Xf, indX, 1, n_samples, r_start)
+
             @simd for i in 1:n_samples
                 Yf[i] = Y[indX[i + r_start]]
                 Wf[i] = W[indX[i + r_start]]
             end
-            nl, nr = zero(U), wsum
-            # lo and hi are the indices of
-            # the least upper bound and the greatest lower bound
-            # of the left and right nodes respectively
+
             hi = 0
-            last_f = Xf[1]
+            nl, nr = zero(U), nt
             is_constant = true
+            last_f = Xf[1]
             while hi < n_samples
                 lo = hi + 1
                 curr_f = Xf[lo]
@@ -145,11 +137,15 @@ module treeregressor
 
                 (lo != 1) && (is_constant = false)
                 # honor min_samples_leaf
+                # if nl >= min_samples_leaf && nr >= min_samples_leaf
+                # @assert nl == lo-1,
+                # @assert nr == n_samples - (lo-1) == n_samples - lo + 1
                 if lo-1 >= min_samples_leaf && n_samples - (lo-1) >= min_samples_leaf
                     unsplittable = false
-                    purity = (rsum * rsum / nr) + (lsum * lsum / nl)
+                    purity = -(nl * purity_function(ncl, nl)
+                             + nr * purity_function(ncr, nr))
                     if purity > best_purity
-                        # will take average at the end, if possible
+                        # will take average at the end
                         threshold_lo = last_f
                         threshold_hi = curr_f
                         best_purity  = purity
@@ -157,33 +153,34 @@ module treeregressor
                     end
                 end
 
-                # update, lssq, rssq, lsum, rsum in the direction
+                # fill ncl and ncr in the direction
                 # that would require the smaller number of iterations
-                if (hi << 1) < n_samples + lo # i.e., hi - lo < n_samples - hi
+                # i.e., hi - lo < n_samples - hi
+                if (hi << 1) < n_samples + lo
                     @simd for i in lo:hi
-                        nr   -= Wf[i]
-                        rsum -= Wf[i]*Yf[i]
-                        rssq -= Wf[i]*Yf[i]*Yf[i]
+                        ncr[Yf[i]] -= Wf[i]
                     end
                 else
-                    nr = rsum = rssq = zero(U)
+                    ncr[:] .= zero(U)
                     @simd for i in (hi+1):n_samples
-                        nr   += Wf[i]
-                        rsum += Wf[i]*Yf[i]
-                        rssq += Wf[i]*Yf[i]*Yf[i]
+                        ncr[Yf[i]] += Wf[i]
                     end
                 end
-                lsum = tsum - rsum
-                lssq = tssq - rssq
-                nl   = wsum - nr
 
+                nr = zero(U)
+                @simd for lab in 1:n_classes
+                    nr += ncr[lab]
+                    ncl[lab] = nc[lab] - ncr[lab]
+                end
+
+                nl = nt - nr
                 last_f = curr_f
             end
 
             # keep track of constant features to be used later.
             if is_constant
-                n_constant += 1
-                features[indf], features[n_constant] = features[n_constant], features[indf]
+                n_const += 1
+                features[indf], features[n_const] = features[n_const], features[indf]
             end
 
             indf += 1
@@ -191,14 +188,13 @@ module treeregressor
 
         # no splits honor min_samples_leaf
         @inbounds if (unsplittable
-                || best_purity - tsum * node.label < min_purity_increase * wsum)
+            || (best_purity / nt + Util.entropy(nc, nt) < min_purity_increase))
             node.is_leaf = true
             return
         else
-            # new_purity - old_purity < stop.min_purity_increase
             bf = Int(best_feature)
             @simd for i in 1:n_samples
-                Xf[i] = X[indX[i + r_start], best_feature]
+                Xf[i] = X[indX[i + r_start], bf]
             end
 
             try
@@ -210,20 +206,21 @@ module treeregressor
             # the threshold and ones that are less than or equal to the threshold
             #                                 ---------------------
             # (so we partition at threshold_lo instead of node.threshold)
-            node.split_at = util.partition!(indX, Xf, threshold_lo, region)
+            node.split_at = Util.partition!(indX, Xf, threshold_lo, region)
             node.feature = best_feature
-            node.features = features[(n_constant+1):n_features]
+            node.features = features[(n_const+1):n_features]
         end
 
-    end
+        return _split!
 
-    @inline function fork!(node :: NodeMeta{S}) where S
+    end
+    @inline function fork!(node::NodeMeta{S}) where S
         ind = node.split_at
         region = node.region
         features = node.features
         # no need to copy because we will copy at the end
-        node.l = NodeMeta{S}(features, region[    1:ind], node.depth + 1)
-        node.r = NodeMeta{S}(features, region[ind+1:end], node.depth + 1)
+        node.l = NodeMeta{S}(features, region[    1:ind], node.depth+1)
+        node.r = NodeMeta{S}(features, region[ind+1:end], node.depth+1)
     end
 
     function check_input(
@@ -257,10 +254,13 @@ module treeregressor
         end
     end
 
-    function _fit(
+    function _run(
             X                     :: Matrix{S},
-            Y                     :: Vector{Float64},
+            Y                     :: Vector{Int},
             W                     :: Vector{U},
+            indX                  :: Vector{Int},
+            loss                  :: Function,
+            n_classes             :: Int,
             max_features          :: Int,
             max_depth             :: Int,
             min_samples_leaf      :: Int,
@@ -268,68 +268,84 @@ module treeregressor
             min_purity_increase   :: Float64,
             rng=Random.GLOBAL_RNG :: Random.AbstractRNG) where {S, U}
 
-        n_samples, n_features = size(X)
+        t_samples, n_features = size(X)
+        n_samples = length(indX)
 
-        Yf  = Array{Float64}(undef, n_samples)
-        Xf  = Array{S}(undef, n_samples)
+        nc  = Array{U}(undef, n_classes)
+        ncl = Array{U}(undef, n_classes)
+        ncr = Array{U}(undef, n_classes)
         Wf  = Array{U}(undef, n_samples)
+        Xf  = Array{S}(undef, n_samples)
+        Yf  = Array{Int}(undef, n_samples)
 
-        indX = collect(Int(1):Int(n_samples))
         root = NodeMeta{S}(collect(1:n_features), 1:n_samples, 0)
         stack = NodeMeta{S}[root]
-
         @inbounds while length(stack) > 0
             node = pop!(stack)
             _split!(
                 X, Y, W,
-                node,
+                loss, node,
                 max_features,
                 max_depth,
                 min_samples_leaf,
                 min_samples_split,
                 min_purity_increase,
                 indX,
-                Xf, Yf, Wf,
-                rng)
+                nc, ncl, ncr, Xf, Yf, Wf, rng)
             if !node.is_leaf
                 fork!(node)
                 push!(stack, node.r)
                 push!(stack, node.l)
             end
         end
-        return (root, indX)
+
+        return root
     end
 
-    function fit(;
+    function _fit(;
             X                     :: Matrix{S},
-            Y                     :: Vector{Float64},
+            Y                     :: Vector{T},
             W                     :: Union{Nothing, Vector{U}},
+            loss                  :: Union{String, Function},
             max_features          :: Int,
             max_depth             :: Int,
             min_samples_leaf      :: Int,
             min_samples_split     :: Int,
             min_purity_increase   :: Float64,
-            rng=Random.GLOBAL_RNG :: Random.AbstractRNG) where {S, U}
+            rng=Random.GLOBAL_RNG :: Random.AbstractRNG) where {S, T, U}
 
         n_samples, n_features = size(X)
+        list, Y_ = Util.assign(Y)
         if W == nothing
             W = fill(1.0, n_samples)
         end
 
+        loss_dict = Dict(
+            "zero_one" => Util.zero_one,
+            "entropy"  => Util.entropy,
+            "gini"     => Util.gini)
+
+        if isa(loss, String)
+            if loss in keys(loss_dict)
+                loss = loss_dict[loss]
+            else
+                throw("loss function not supported")
+            end
+        end
+
         check_input(
-            X,
-            Y,
-            W,
+            X, Y, W,
             max_features,
             max_depth,
             min_samples_leaf,
             min_samples_split,
             min_purity_increase)
-
-        root, indX = _fit(
-            X,
-            Y,
-            W,
+        indX = collect(1:n_samples)
+        root = _run(
+            X, Y_, W,
+            indX,
+            loss,
+            length(list),
             max_features,
             max_depth,
             min_samples_leaf,
@@ -337,7 +353,7 @@ module treeregressor
             min_purity_increase,
             rng)
 
-        return Tree{S}(root, indX)
-
+        return Tree{S, T}(root, list, indX)
     end
+
 end
