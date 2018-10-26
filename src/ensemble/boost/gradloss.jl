@@ -38,7 +38,7 @@ module GradientLossFunction
         function minus_gradient(y, p)
             return if p > y
                 1
-            else if p < y
+            elseif p < y
                 -1
             else
                 0

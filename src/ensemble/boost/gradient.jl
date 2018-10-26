@@ -25,7 +25,7 @@ module Gradient
             loss          :: GradientLossFunction.Loss,
             n_estimators  :: Int,
             learning_rate :: Float64;
-            rng           = Random.GLOBAL_RNG) where {S, T}
+            rng           = Random.GLOBAL_RNG) where {S, T, U}
         # TODO : check inputs
         # W = ones(n_samples) # weights to make api consistent
         n_samples = length(Y)
