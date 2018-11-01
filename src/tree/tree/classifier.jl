@@ -8,8 +8,6 @@ module Classifier
     import ..Util
     import Random
 
-    export _fit
-
     mutable struct NodeMeta{S}
         l           :: NodeMeta{S}      # right child
         r           :: NodeMeta{S}      # left child

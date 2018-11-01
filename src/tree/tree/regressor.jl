@@ -296,45 +296,4 @@ module Regressor
         return root
     end
 
-    function fit(;
-            X                     :: Matrix{S},
-            Y                     :: Vector{Float64},
-            W                     :: Union{Nothing, Vector{U}},
-            max_features          :: Int,
-            max_depth             :: Int,
-            min_samples_leaf      :: Int,
-            min_samples_split     :: Int,
-            min_purity_increase   :: Float64,
-            rng=Random.GLOBAL_RNG :: Random.AbstractRNG) where {S, U}
-
-        n_samples, n_features = size(X)
-        if W == nothing
-            W = fill(1.0, n_samples)
-        end
-
-        check_input(
-            X,
-            Y,
-            W,
-            max_features,
-            max_depth,
-            min_samples_leaf,
-            min_samples_split,
-            min_purity_increase)
-        indX = collect(1:n_samples)
-        root = _fit(
-            X,
-            Y,
-            W,
-            indX,
-            max_features,
-            max_depth,
-            min_samples_leaf,
-            min_samples_split,
-            min_purity_increase,
-            rng)
-
-        return Tree{S}(root, indX)
-
-    end
 end

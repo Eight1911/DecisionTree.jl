@@ -2,14 +2,12 @@
 # TODO : make a nice interface
 module Adaptive
     import ...Tree.Classifier
-    import ...Tree.Regressor
 
     # update the new weights for the next iteration of adaboost
     # using accuracy of the predictions and return the new coefficient 
     function update_coeffs(P, Y, W, n_classes, learning_rate)
         # assume total weight is 1. i.e.
         # W is already normalized so that sum(W) = 1
-
         err = 0.0
         for i in 1:length(P)
             weight = W[i]
@@ -62,7 +60,7 @@ module Adaptive
         W         = ones(n_samples) / n_samples
         P         = Array{T}(undef, n_samples)
         for i in 1:n_estimators
-            tree       = fit(Y, X, W, rng=rng)
+            tree       = fit(X, Y, W, rng=rng)
             n_classes  = length(tree.list)
             leaf_vals(tree.root, P)
             err, alpha = update_coeffs(Y, P, W, n_classes, learning_rate)

@@ -2,8 +2,11 @@
 # written by Poom Chiarawongse <eight1911@gmail.com>
 
 module Util
+    import Random
+    # export gini, entropy, zero_one, q_bi_sort!, hypergeometric
 
-    export gini, entropy, zero_one, q_bi_sort!, hypergeometric
+    mk_rng(rng::Random.AbstractRNG) = rng
+    mk_rng(seed::T) where T <: Integer = Random.MersenneTwister(seed)
 
     function assign(Y :: Vector{T}, list :: Vector{T}) where T
         dict = Dict{T, Int}()
@@ -166,6 +169,46 @@ module Util
         return v
     end
 
+
+    # uniform sampler for `k` samples 
+    # from `n` without replacement
+    # expected to run `t` times
+    function sampler(n, k, t)
+        # standard fisher-yates shuffle
+        function time()
+            vals = collect(1, n)
+            function main(rng)
+                for ind in n:-1:(n-k+1)
+                    i = rand(rng, 1:ind)
+                    vals[ind], vals[i] = vals[i], vals[ind]
+                end
+
+                return vals[end-k+1:end]
+            end
+
+            return main
+        end
+
+        # space efficient uniform sampling without replacement
+        # courtesy to user Chronial on stackoverflow
+        function space(rng)
+            state = Dict()
+            vals = Array{Int}(undef, k)
+            for ind in n:-1:(n-k+1)
+                i = rand(rng, 1:n)
+                vals[n-ind+1] = get(state, i, i)
+                state[i] = get(state, ind-1, ind-1)
+                delete!(ind-1)
+            end
+        end
+
+        return if k * t < n
+            space
+        else 
+            time()
+        end
+    end
+    
 
     # The code function below is a small port from numpy's library
     # library which is distributed under the 3-Clause BSD license.

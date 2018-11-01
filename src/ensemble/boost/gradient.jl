@@ -1,6 +1,5 @@
 module Gradient
     include("gradloss.jl")
-    import ...Tree.Classifier
     import ...Tree.Regressor
 
     # set the label of each leaf to the minimizer
@@ -10,7 +9,7 @@ module Gradient
     function update_step(node, Y, P, R, minimize, learning_rate)
         if node.is_leaf
             node.label = learning_rate * minimize(R, node.region)
-            P[node.region] .+= node.label
+            P[node.region] .+= node.label # bug here
         else
             minimize_loss(node.l, Y, P, R, minimize, learning_rate)
             minimize_loss(node.r, Y, P, R, minimize, learning_rate)
