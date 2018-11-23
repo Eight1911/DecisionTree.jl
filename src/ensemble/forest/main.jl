@@ -11,9 +11,9 @@ module Forest
     function build_forest_classifier(
             labels              :: Vector{T},
             features            :: Matrix{S},
-            n_subfeatures       = -1,
             n_trees             = 10,
             partial_sampling    = 0.7,
+            n_subfeatures       = -1,
             max_depth           = -1,
             min_samples_leaf    = 1,
             min_samples_split   = 2,
@@ -38,7 +38,8 @@ module Forest
         n_samples = floor(Int, partial_sampling * t_samples)
         sampler   = Tree.Util.sampler(n_samples, t_samples, n_trees)
         list, Y   = Tree.Util.assign(labels)
-        forest    = Array{Struct.Tree}(undef, n_trees)
+        n_classes = length(list)
+        forest    = Array{Struct.Tree{S, T}}(undef, n_trees)
         Distributed.@distributed for i in 1:n_trees
             indX = sampler(rng)
             root = Tree.Classifier._run(
@@ -56,15 +57,15 @@ module Forest
             forest[i] = Misc.light_classifier(tree, labels, "$(Tree.Util.Entropy)")
         end
 
-        return Struct.Ensemble{S, T}([forest], nothing, "classification-forest")
+        return Struct.Ensemble{S, T}(forest, nothing, "classification-forest")
     end
 
     function build_forest_regressor(
             labels              :: Vector{T},
             features            :: Matrix{S},
-            n_subfeatures       = -1,
             n_trees             = 10,
             partial_sampling    = 0.7,
+            n_subfeatures       = -1,
             max_depth           = -1,
             min_samples_leaf    = 1,
             min_samples_split   = 2,
@@ -88,7 +89,7 @@ module Forest
         t_samples = length(labels)
         n_samples = floor(Int, partial_sampling * t_samples)
         sampler   = Tree.Util.sampler(n_samples, t_samples, n_trees)
-        forest    = Array{Struct.Tree}(undef, n_trees)
+        forest    = Array{Struct.Tree{S, T}}(undef, n_trees)
         Distributed.@distributed for i in 1:n_trees
             root = Tree.Regressor._fit(
                 features, labels, weights,
@@ -99,11 +100,12 @@ module Forest
                 min_samples_split   = Int(min_samples_split),
                 min_purity_increase = Float64(min_purity_increase),
                 rng                 = Random.GLOBAL_RNG)
-            tree = Tree.Regressor.Tree(root, list, indX)
+            tree = Tree.Regressor.Tree(root, indX)
             forest[i] = Misc.light_regressor(tree, labels, "$(Tree.Util.Entropy)")
         end
 
-        return Struct.Ensemble{S, T}([forest], nothing, "regression-forest")
+        return Struct.Ensemble{S, T}(forest, nothing, "regression-forest")
     end
 
 end
+

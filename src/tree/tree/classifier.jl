@@ -8,6 +8,11 @@ module Classifier
     import ..Util
     import Random
 
+    const LOSS_DICT = Dict(
+        "zero_one" => Util.zero_one,
+        "entropy"  => Util.entropy,
+        "gini"     => Util.gini)
+
     mutable struct NodeMeta{S}
         l           :: NodeMeta{S}      # right child
         r           :: NodeMeta{S}      # left child
@@ -234,7 +239,7 @@ module Classifier
         if length(Y) != n_samples
             throw("dimension mismatch between X and Y ($(size(X)) vs $(size(Y))")
         elseif length(W) != n_samples
-            throw("dimension mismatch between X and W ($(size(X)) vs $(size(Y))")
+            throw("dimension mismatch between X and W ($(size(X)) vs $(size(W))")
         elseif max_depth < -1
             throw("unexpected value for max_depth: $(max_depth) (expected:"
                 * " max_depth >= 0, or max_depth = -1 for infinite depth)")
@@ -266,8 +271,17 @@ module Classifier
             min_purity_increase   :: Float64,
             rng=Random.GLOBAL_RNG :: Random.AbstractRNG) where {S, U}
 
+
         t_samples, n_features = size(X)
         n_samples = length(indX)
+
+        if max_depth == -1
+            max_depth = typemax(Int)
+        end
+
+        if max_features == -1
+            max_features = n_features
+        end
 
         nc  = Array{U}(undef, n_classes)
         ncl = Array{U}(undef, n_classes)
@@ -304,6 +318,7 @@ module Classifier
             X                     :: Matrix{S},
             Y                     :: Vector{T},
             W                     :: Union{Nothing, Vector{U}},
+            indX                  :: Vector{Int},
             loss                  :: Union{String, Function},
             max_features          :: Int,
             max_depth             :: Int,
@@ -312,20 +327,15 @@ module Classifier
             min_purity_increase   :: Float64,
             rng=Random.GLOBAL_RNG :: Random.AbstractRNG) where {S, T, U}
 
-        n_samples, n_features = size(X)
+        n_samples, _ = size(X)
         list, Y_ = Util.assign(Y)
         if W == nothing
             W = fill(1.0, n_samples)
         end
 
-        loss_dict = Dict(
-            "zero_one" => Util.zero_one,
-            "entropy"  => Util.entropy,
-            "gini"     => Util.gini)
-
         if isa(loss, String)
-            if loss in keys(loss_dict)
-                loss = loss_dict[loss]
+            if loss in keys(LOSS_DICT)
+                loss = LOSS_DICT[loss]
             else
                 throw("loss function not supported")
             end
@@ -338,7 +348,7 @@ module Classifier
             min_samples_leaf,
             min_samples_split,
             min_purity_increase)
-        indX = collect(1:n_samples)
+
         root = _run(
             X, Y_, W,
             indX,

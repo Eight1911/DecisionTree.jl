@@ -2,6 +2,7 @@
 # written by Poom Chiarawongse <eight1911@gmail.com>
 
 module Util
+
     import Random
     # export gini, entropy, zero_one, q_bi_sort!, hypergeometric
 
@@ -23,11 +24,7 @@ module Util
     end
 
     function assign(Y :: Vector{T}) where T
-        set = Set{T}()
-        for y in Y
-            push!(set, y)
-        end
-        list = collect(set)
+        list = sorted(unique(Y))
         return assign(Y, list)
     end
 
@@ -171,7 +168,7 @@ module Util
 
 
     # uniform sampler for `k` samples 
-    # from `n` without replacement
+    # from `n` objects without replacement
     # expected to run `t` times
     function sampler(n, k, t)
         # standard fisher-yates shuffle

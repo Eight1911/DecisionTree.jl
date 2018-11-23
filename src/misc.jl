@@ -45,7 +45,7 @@ module Misc
     mk_rng(seed::T) where T <: Integer = Random.MersenneTwister(seed)
 
     # convert between two tree representations
-    function light_regressor(tree, labels, method) where {S, T}
+    function light_regressor(tree, labels, method) where {S, T <: Float64}
 
         function recurse(node, list)
             if node.is_leaf
@@ -94,10 +94,10 @@ module Misc
         end
     end
 
-    function prune_tree(tree::LeafOrNode{S, T}, purity_thresh=1.0) where {S, T}
+    function prune_tree!(tree::Tree{S, T}, purity_thresh=1.0) where {S, T}
 
         function recursive_assign(leaf::Leaf{T}, set::Set{T})
-            for item in leaf.values
+            @simd for item in leaf.values
                 push!(set, item)
             end
         end
@@ -113,13 +113,13 @@ module Misc
                 label2int     :: Dict{T, Int},
                 labels        :: Vector{T})
             nc = fill(0.0, length(labels))
-            for i in leaf.values
-                nc[label2int[i]] += 1.0
+            @simd for i in leaf.values
+                @inbounds nc[label2int[i]] += 1.0
             end
             return nc, leaf
         end
 
-        function recurse(
+        function recurse!(
                 node          :: Node{S, T},
                 purity_thresh :: Float64,
                 label2int     :: Dict{T, Int},
@@ -131,7 +131,7 @@ module Misc
             if is_leaf(l) && is_leaf(r)
 
                 @simd for i in 1:length(labels)
-                    ncl[i] += ncr[i]
+                    @inbounds ncl[i] += ncr[i]
                 end
 
                 n_samples = length(l.values) + length(r.values)
@@ -145,23 +145,21 @@ module Misc
             return ncl, Node{S, T}(node.featid, node.featval, l, r)
         end
 
-        function main(tree::LeafOrNode{S, T}, purity_thresh=1.0)
+        function main(tree::Tree{S, T}, purity_thresh=1.0)
             set = Set{T}()
-            recursive_assign(tree, set)
+            recursive_assign(tree.root, set)
             labels = collect(set)
             label2int  = Dict{T, Int}(label=>i for (i, label) in enumerate(labels))
 
-            ncl, node = recurse(tree, purity_thresh, label2int, labels)
+            ncl, node = recurse(tree.root, purity_thresh, label2int, labels)
 
-            return node
+            return tree
         end
 
         return main(tree, 1.0-purity_thresh)
     end
 
 end
-
-
 
 module Apply
 
@@ -176,7 +174,7 @@ module Apply
     end
 
     function majority(out)
-        counts = {}
+        counts = Dict()
         for i in out
             counts[i] = get(counts, i, 0) + 1
         end
@@ -184,7 +182,7 @@ module Apply
     end
 
     function weighted_majority(out, w)
-        counts = {}
+        counts = Dict()
         for i in 1:length(out)
             item = out[i]
             counts[item] = get(counts, item, 0) + w[i]
@@ -198,7 +196,7 @@ module Apply
     function _apply(
             tree        :: Tree{S, T},
             features    :: Matrix{S},
-            mapper      :: Function
+            mapper      :: Function,
             index       :: Int) where {S, T}
         curr = tree.root
         while !Struct.is_leaf(curr)
@@ -214,7 +212,7 @@ module Apply
 
     function apply(
             tree        :: Tree{S, T},
-            features    :: Vector{S}
+            features    :: Vector{S},
             mapper      :: Function = take_label) where {S, T}
         curr = tree.root
         while !Struct.is_leaf(curr)
@@ -231,7 +229,7 @@ module Apply
     # works for any array dimension
     function apply(
             tree        :: Tree{S, T},
-            features    :: Array{S}
+            features    :: Array{S},
             mapper      :: Function = take_label) where {S, T}
 
         dims = shape(features)
@@ -239,12 +237,14 @@ module Apply
             return reshape([], dims[1:end-1])
         end
 
+        # TODO : @inbounds this
         features    = reshape(features, :, dims[end])
         n_samples   = size(features, 1)
         # take the first index to get the return type
         tester      = _apply(tree, features, mapper, 1)
         predictions = Array{typeof(tester)}(undef, n_samples)
-        predictions[1] = tester
+        @inbounds predictions[1] = tester
+        # @inbounds @simd 
         for ind in 2:n_samples
             predictions[i] = _apply(tree, features, mapper, ind)
         end
@@ -258,19 +258,39 @@ module Apply
     function _apply(
             ensemble    :: Ensemble{S, T},
             features    :: Vector{S},
-            reducer     :: Function,
             mapper      :: Function,
             ind         :: Int) where {S, T}
         trees       = ensemble.trees
         tester      = apply(trees[1], features, mapper, ind)
         predictions = Array{typeof(tester)}(undef, n_samples)
-        predictions[1] = tester
-        for i in 2:trees.length
+        @inbounds predictions[1] = tester
+        @inbounds @simd for i in 2:trees.length
+            predictions[i] = _apply(trees[i], features, mapper, ind)
+        end
+
+        return predictions
+    end
+
+    function _apply(
+            ensemble    :: Ensemble{S, T},
+            features    :: Vector{S},
+            reducer     :: Function,
+            mapper      :: Function,
+            predictions :: Vector{U},
+            ind         :: Int) where {S, T, U}
+        trees       = ensemble.trees
+        n_outputs   = length(trees)
+        @assert n_outputs == length(predictions)
+        # tester      = apply(trees[1], features, mapper, ind)
+        # predictions = Array{typeof(tester)}(undef, n_samples)
+        # predictions[1] = tester
+        @inbounds @simd for i in 1:trees.length
             predictions[i] = _apply(trees[i], features, mapper, ind)
         end
 
         return reducer(predictions)
     end
+
 
     function apply(
             ensemble    :: Ensemble{S, T},
@@ -278,13 +298,13 @@ module Apply
             reducer     :: Function,
             mapper      :: Function = take_label) where {S, T}
         if length(ensemble.trees) == 0
-            throw ("empty ensemble")
+            throw("empty ensemble")
         end
         trees       = ensemble.trees
         tester      = apply(trees[1], features, mapper)
         predictions = Array{typeof(tester)}(undef, n_samples)
-        predictions[1] = tester
-        for i in 2:trees.length
+        @inbounds predictions[1] = tester
+        @inbounds @simd for i in 2:trees.length
             predictions[i] = apply(trees[i], features, mapper)
         end
 
@@ -298,7 +318,7 @@ module Apply
             reducer     :: Function,
             mapper      :: Function = take_label) where {S, T}
         if length(ensemble.trees) == 0
-            throw ("empty ensemble")
+            throw("empty ensemble")
         end
         dims = shape(features)
         if size(features) == 0
@@ -306,21 +326,23 @@ module Apply
         end
 
         trees       = ensemble.trees
-        features    = reshape(features, :, dims[end])
+        features    = reshape(features, :, dims[end]) # TODO : @inbounds this
         n_samples   = size(features, 1)
 
-        tester      = _apply(ensemble, features, reducer, mapper, 1)
-        predictions = Array{typeof(tester)}(undef, n_samples)
-        predictions[1] = tester
-
+        treeoutputs = _apply(ensemble, features, mapper, 1)
+        testoutput  = reducer(treeoutputs)
+        predictions = Array{typeof(testoutput)}(undef, n_samples)
+        @inbounds predictions[1] = testoutput
+        # @inbounds @simd 
         for ind in 2:n_samples
-            predictions[i] = _apply(ensemble, features, reducer, mapper, ind)
+            predictions[ind] = _apply(ensemble, features, reducer, 
+                                      mapper, treeoutputs, ind)
         end
 
         return reshape(predictions, dims[1:end-1])
     end
 
-    function apply(ensemble::Ensemble{S, T}, features::Array{S})
+    function apply(ensemble::Ensemble{S, T}, features::Array{S}) where {S, T}
         if ensemble.method == "forest" && T <: Float64
             return apply(ensemble, features, mean, take_label)
         elseif ensemble.method == "forest"
@@ -331,3 +353,4 @@ module Apply
         end
     end
 end
+

@@ -2,6 +2,8 @@
 # TODO : make a nice interface
 module Adaptive
     import ...Tree.Classifier
+    import ...Struct
+    import ...Misc
 
     # update the new weights for the next iteration of adaboost
     # using accuracy of the predictions and return the new coefficient 
@@ -9,6 +11,7 @@ module Adaptive
         # assume total weight is 1. i.e.
         # W is already normalized so that sum(W) = 1
         err = 0.0
+        # @inbounds @simd 
         for i in 1:length(P)
             weight = W[i]
             if P[i] != Y[i]
@@ -22,6 +25,7 @@ module Adaptive
         total = (err * nay) + (1.0 - err) # new total weight
         nay   = nay / total # scaling of things that are wrong
         yay   = 1.0 / total # scaling of things that are right
+        # @inbounds @simd
         for i in 1:length(P)
             if P[i] == Y[i]
                 W[i] *= yay
@@ -34,13 +38,20 @@ module Adaptive
     end
 
     # copy the values fitted to each sample into the array P
-    function leaf_vals(node, P)
-        if node.is_leaf
-            P[node.region] = node.label
-        else
-            predict(node.l, P)
-            predict(node.r, P)
+    function leaf_vals(tree, P)
+
+        function main(node, indX, P)
+            if node.is_leaf
+                @inbounds @simd for i in node.region
+                    P[indX[i]] = node.label
+                end
+            else
+                main(node.l, P)
+                main(node.r, P)
+            end
         end
+
+        return main(tree.root, tree.labels, P)
     end
 
     # SAMME algorithm for multiclass adaboost
@@ -52,8 +63,8 @@ module Adaptive
             learning_rate :: Float64;
             rng           = Random.GLOBAL_RNG) where {S, T}
         # TODO : check inputs
-        # TODO : make this more efficient (?)
-        n_classes = length(Set(Y))
+        # TODO : add custom tolerance (?)
+        rng       = Misc.mk_rng(rng)
         n_samples = length(Y)
         coeffs    = Float64[]
         trees     = Tree.Classifier.Tree[]
@@ -62,10 +73,10 @@ module Adaptive
         for i in 1:n_estimators
             tree       = fit(X, Y, W, rng=rng)
             n_classes  = length(tree.list)
-            leaf_vals(tree.root, P)
+            leaf_vals(tree, P)
             err, alpha = update_coeffs(Y, P, W, n_classes, learning_rate)
             push!(coeffs, alpha)
-            push!(stumps, tree)
+            push!(trees, tree)
             if err < 1e-7
                 break
             end
@@ -73,5 +84,77 @@ module Adaptive
 
         return (trees, coeffs)
     end
+
+
+    function build_adaboost(
+        labels              :: Vector{T},
+        features            :: Matrix{S},
+        n_trees             = 10,
+        partial_sampling    = 0.7,
+        n_subfeatures       = -1,
+        max_depth           = -1,
+        min_samples_leaf    = 1,
+        min_samples_split   = 2,
+        min_purity_increase = 0.0;
+        rng                 = Random.GLOBAL_RNG) where {S, T}
+
+    end
+
+    function fitter(
+            X                   :: Matrix{S},
+            Y                   :: Vector{T},
+            loss                = "zero_one",
+            partial_sampling    = 0.7,
+            max_features        = -1,
+            max_depth           = -1,
+            min_samples_leaf    = 1,
+            min_samples_split   = 2,
+            min_purity_increase = 0.0) where {S, T}
+
+        t_samples, n_features = size(X)
+        n_samples = Int(round(partial_sampling * n_samples))
+        list, Y   = Util.assign(Y)
+        allX      = collect(1:t_samples)
+
+        Tree.Classifier.check_input(
+            X, Y, fill(1.0, t_samples),
+            max_features,
+            max_depth,
+            min_samples_leaf,
+            min_samples_split,
+            min_purity_increase)
+
+        if isa(loss, String)
+            if loss in keys(LOSS_DICT)
+                loss = LOSS_DICT[loss]
+            else
+                throw("loss function not supported")
+            end
+        end
+
+        function main(W; rng)
+
+            if length(W) != n_samples
+                throw("dimension mismatch between X"
+                    * " and W ($(size(X)) vs $(size(W))")
+            end
+
+            return Tree.Classifier._run(
+                X, Y, W,
+                indX, loss,
+                n_classes,
+                max_features,
+                max_depth,
+                min_samples_leaf,
+                min_samples_split,
+                min_purity_increase,
+                rng=rng)
+        end
+
+        return main
+    end
+
+
+
 
 end

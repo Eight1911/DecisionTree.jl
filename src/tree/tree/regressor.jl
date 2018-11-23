@@ -262,16 +262,35 @@ module Regressor
             Y                     :: Vector{Float64},
             W                     :: Vector{U},
             indX                  :: Vector{Int},
+            loss                  :: Union{String, Function},
             max_features          :: Int,
             max_depth             :: Int,
             min_samples_leaf      :: Int,
             min_samples_split     :: Int,
             min_purity_increase   :: Float64,
             rng=Random.GLOBAL_RNG :: Random.AbstractRNG) where {S, U}
+        
+        check_input(
+            X, Y, W,
+            max_features,
+            max_depth,
+            min_samples_leaf,
+            min_samples_split,
+            min_purity_increase)
+
+        if max_depth == -1
+            max_depth = typemax(Int)
+        end
+
+        if max_features == -1
+            max_features = n_features
+        end
+
         n_samples, n_features = size(X)
-        Yf  = Array{Float64}(undef, n_samples)
-        Xf  = Array{S}(undef, n_samples)
-        Wf  = Array{U}(undef, n_samples)
+        Yf = Array{Float64}(undef, n_samples)
+        Xf = Array{S}(undef, n_samples)
+        Wf = Array{U}(undef, n_samples)
+
         root = NodeMeta{S}(collect(1:n_features), 1:n_samples, 0)
         stack = NodeMeta{S}[root]
         @inbounds while length(stack) > 0

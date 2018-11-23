@@ -1,25 +1,22 @@
+
 include("struct.jl")
 include("misc.jl")
 include("tree/main.jl")
 include("ensemble/main.jl")
 
-
-import Struct: Leaf, Tree, Node, Ensemble, is_leaf, depth
-
 #=
-    exported: Leaf, Node, Tree, Ensemble, is_leaf
+    exportable:
+        Leaf, Tree, Node, Ensemble, 
+        is_leaf, depth, print_tree,
+        build_tree, build_forest, prune_tree,
 
-    to export: 
-        print_tree, depth, 
-        build_tree,
-        build_forest
-        prune_tree,
+    to interface:
+        apply_tree, apply_forest, apply_adaboost,
 
     to implement:
-        apply_forest, 
         build_adaboost_stumps,
         apply_adaboost_stumps,
-        ConfusionMatrix, 
+        ConfusionMatrix,
         confusion_matrix, 
         load_data
 
