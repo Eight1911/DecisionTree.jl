@@ -1,7 +1,7 @@
 
 # TODO : make a nice interface
 module Adaptive
-    import ...Tree.Classifier
+    import ...BuildTree.Classifier
     import ...Struct
     import ...Misc
 
@@ -57,26 +57,25 @@ module Adaptive
     # SAMME algorithm for multiclass adaboost
     function samme(
             fit           :: Function,
-            X             :: Matrix{S},
             Y             :: Vector{T},
             n_estimators  :: Int,
             learning_rate :: Float64;
             rng           = Random.GLOBAL_RNG) where {S, T}
         # TODO : check inputs
-        # TODO : add custom tolerance (?)
         rng       = Misc.mk_rng(rng)
         n_samples = length(Y)
         coeffs    = Float64[]
-        trees     = Tree.Classifier.Tree[]
+        trees     = BuildTree.Classifier.Tree[]
         W         = ones(n_samples) / n_samples
         P         = Array{T}(undef, n_samples)
         for i in 1:n_estimators
-            tree       = fit(X, Y, W, rng=rng)
+            tree       = fit(W, rng=rng)
             n_classes  = length(tree.list)
             leaf_vals(tree, P)
             err, alpha = update_coeffs(Y, P, W, n_classes, learning_rate)
             push!(coeffs, alpha)
             push!(trees, tree)
+            # TODO : add custom tolerance (?)
             if err < 1e-7
                 break
             end
@@ -85,20 +84,6 @@ module Adaptive
         return (trees, coeffs)
     end
 
-
-    function build_adaboost(
-        labels              :: Vector{T},
-        features            :: Matrix{S},
-        n_trees             = 10,
-        partial_sampling    = 0.7,
-        n_subfeatures       = -1,
-        max_depth           = -1,
-        min_samples_leaf    = 1,
-        min_samples_split   = 2,
-        min_purity_increase = 0.0;
-        rng                 = Random.GLOBAL_RNG) where {S, T}
-
-    end
 
     function fitter(
             X                   :: Matrix{S},
@@ -112,12 +97,14 @@ module Adaptive
             min_purity_increase = 0.0) where {S, T}
 
         t_samples, n_features = size(X)
-        n_samples = Int(round(partial_sampling * n_samples))
-        list, Y   = Util.assign(Y)
-        allX      = collect(1:t_samples)
+        n_samples = floor(partial_sampling * t_samples)
+        list, _Y  = Util.assign(Y)
+        shuffle   = shuffler(t_samples, n_samples)
+        n_classes = length(list)
 
-        Tree.Classifier.check_input(
-            X, Y, fill(1.0, t_samples),
+        # TODO: check partial_sampling
+        BuildTree.Classifier.check_input(
+            X, _Y, fill(1.0, t_samples),
             max_features,
             max_depth,
             min_samples_leaf,
@@ -139,8 +126,10 @@ module Adaptive
                     * " and W ($(size(X)) vs $(size(W))")
             end
 
-            return Tree.Classifier._run(
-                X, Y, W,
+            indX = shuffle(rng)
+
+            return BuildTree.Classifier._run(
+                X, _Y, W,
                 indX, loss,
                 n_classes,
                 max_features,
@@ -151,10 +140,39 @@ module Adaptive
                 rng=rng)
         end
 
-        return main
+        return (list, _Y, main)
     end
 
+    function build_adaboost(
+        labels              :: Vector{T},
+        features            :: Matrix{S},
+        n_trees             = 10,
+        l_rate              = 0.05,
+        partial_sampling    = 0.7,
+        n_subfeatures       = -1,
+        max_depth           = -1,
+        min_samples_leaf    = 1,
+        min_samples_split   = 2,
+        min_purity_increase = 0.0;
+        rng                 = Random.GLOBAL_RNG) where {S, T}
+
+        X = features
+        Y = labels
+        max_features = n_subfeatures
+        loss = "zero_one"
+        list, _Y, fit = fitter(
+            X, Y,
+            loss,
+            partial_sampling,
+            max_features,
+            max_depth,
+            min_samples_leaf,
+            min_samples_split,
+            min_purity_increase)
+
+        trees, coeffs = samme(fit, _Y, n_trees, l_rate, rng=rng)
 
 
-
+        return Misc.light_classfier # pause
+    end
 end

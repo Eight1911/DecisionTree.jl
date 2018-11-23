@@ -6,9 +6,6 @@ module Util
     import Random
     # export gini, entropy, zero_one, q_bi_sort!, hypergeometric
 
-    mk_rng(rng::Random.AbstractRNG) = rng
-    mk_rng(seed::T) where T <: Integer = Random.MersenneTwister(seed)
-
     function assign(Y :: Vector{T}, list :: Vector{T}) where T
         dict = Dict{T, Int}()
         @simd for i in 1:length(list)
@@ -24,7 +21,7 @@ module Util
     end
 
     function assign(Y :: Vector{T}) where T
-        list = sorted(unique(Y))
+        list = sort(unique(Y))
         return assign(Y, list)
     end
 
@@ -166,25 +163,29 @@ module Util
         return v
     end
 
+    # standard fisher-yates shuffle
+    function shuffler(n, k)
+        if k > n || 0 > k
+            throw("expected 0 <= k < n, i.e., 0 <= $(k) < $(n)")
+        end
+
+        vals = collect(1:n)
+        function main(rng)
+            for ind in n:-1:(n-k+1)
+                i = rand(rng, 1:ind)
+                vals[ind], vals[i] = vals[i], vals[ind]
+            end
+
+            return vals[end-k+1:end]
+        end
+
+        return main
+    end
 
     # uniform sampler for `k` samples 
     # from `n` objects without replacement
     # expected to run `t` times
     function sampler(n, k, t)
-        # standard fisher-yates shuffle
-        function time()
-            vals = collect(1, n)
-            function main(rng)
-                for ind in n:-1:(n-k+1)
-                    i = rand(rng, 1:ind)
-                    vals[ind], vals[i] = vals[i], vals[ind]
-                end
-
-                return vals[end-k+1:end]
-            end
-
-            return main
-        end
 
         # space efficient uniform sampling without replacement
         # courtesy to user Chronial on stackoverflow
@@ -195,14 +196,16 @@ module Util
                 i = rand(rng, 1:n)
                 vals[n-ind+1] = get(state, i, i)
                 state[i] = get(state, ind-1, ind-1)
-                delete!(ind-1)
+                # delete!(state, ind-1)
             end
+
+            return vals
         end
 
         return if k * t < n
             space
         else 
-            time()
+            shuffler(n, k)
         end
     end
     

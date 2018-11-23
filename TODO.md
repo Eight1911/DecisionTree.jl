@@ -1,3 +1,8 @@
+bugs
+----
+ * bug in nfold_CV where all of input data is used to trained the model
+ * add label vector compatability with Float32 for regression
+ * increase the performance of current adaboost implementation
 
 tests and validation
 --------------------

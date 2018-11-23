@@ -246,8 +246,8 @@ module Classifier
         elseif n_features < max_features
             throw("number of features $(n_features) is less than the number "
                 * "of max features $(max_features)")
-        elseif max_features < 0
-            throw("number of features $(max_features) must be >= zero ")
+        elseif max_features < -1
+            throw("number of features $(max_features) must be >= zero or -1")
         elseif min_samples_leaf < 1
             throw("min_samples_leaf must be a positive integer "
                 * "(given $(min_samples_leaf))")
@@ -327,10 +327,10 @@ module Classifier
             min_purity_increase   :: Float64,
             rng=Random.GLOBAL_RNG :: Random.AbstractRNG) where {S, T, U}
 
-        n_samples, _ = size(X)
+        t_samples, _ = size(X)
         list, Y_ = Util.assign(Y)
         if W == nothing
-            W = fill(1.0, n_samples)
+            W = ones(t_samples)
         end
 
         if isa(loss, String)

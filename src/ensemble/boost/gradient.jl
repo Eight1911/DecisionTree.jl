@@ -1,6 +1,6 @@
 module Gradient
     include("gradloss.jl")
-    import ...Tree.Regressor
+    import ...BuildTree.Regressor
 
     # set the label of each leaf to the minimizer
     # of the given loss of the things that fall into it
@@ -30,7 +30,7 @@ module Gradient
         n_samples = length(Y)
         gradient  = loss.minus_gradient
         minimize  = loss.point_minimize
-        trees     = Tree.Regressor.Tree[]
+        trees     = BuildTree.Regressor.Tree[]
         P         = zeros(T, n_samples) # cumulative predictions
         L         = Y.copy()            # Y - P
         R         = Y.copy()            # pseudo-residuals
@@ -77,7 +77,7 @@ module Gradient
             if max_features == 0
                 max_features = shape(X, 2) # n_features
             end
-            return Tree.Regressor.fit(
+            return BuildTree.Regressor.fit(
                 X, Y, Z,
                 max_features,
                 max_depth,

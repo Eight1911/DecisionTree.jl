@@ -246,8 +246,8 @@ module Regressor
         elseif n_features < max_features
             throw("number of features $(n_features) is less than the number "
                 * "of max features $(max_features)")
-        elseif max_features < 0
-            throw("number of features $(max_features) must be >= zero ")
+        elseif max_features < -1
+            throw("number of features $(max_features) must be >= zero or -1")
         elseif min_samples_leaf < 1
             throw("min_samples_leaf must be a positive integer "
                 * "(given $(min_samples_leaf))")
@@ -257,10 +257,10 @@ module Regressor
         end
     end
 
-    function _fit(
+    function _fit(;
             X                     :: Matrix{S},
             Y                     :: Vector{Float64},
-            W                     :: Vector{U},
+            W                     :: Union{Vector{U}, Nothing},
             indX                  :: Vector{Int},
             loss                  :: Union{String, Function},
             max_features          :: Int,
@@ -269,7 +269,17 @@ module Regressor
             min_samples_split     :: Int,
             min_purity_increase   :: Float64,
             rng=Random.GLOBAL_RNG :: Random.AbstractRNG) where {S, U}
-        
+
+        t_samples, n_features = size(X)
+        n_samples = length(indX)
+
+        if W == nothing
+            W = ones(t_samples)
+            Wf = Array{Float64}(undef, n_samples)
+        else
+            Wf = Array{U}(undef, n_samples)
+        end
+
         check_input(
             X, Y, W,
             max_features,
@@ -286,10 +296,8 @@ module Regressor
             max_features = n_features
         end
 
-        n_samples, n_features = size(X)
         Yf = Array{Float64}(undef, n_samples)
         Xf = Array{S}(undef, n_samples)
-        Wf = Array{U}(undef, n_samples)
 
         root = NodeMeta{S}(collect(1:n_features), 1:n_samples, 0)
         stack = NodeMeta{S}[root]
@@ -312,7 +320,7 @@ module Regressor
                 push!(stack, node.l)
             end
         end
-        return root
+        return Tree(root, indX)
     end
 
 end
