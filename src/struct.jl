@@ -237,14 +237,20 @@ module Apply
         return findmax(counts)[2]
     end
 
-    function weighted_majority(out, w)
-        counts = Dict()
-        for i in 1:length(out)
-            item = out[i]
-            counts[item] = get(counts, item, 0) + w[i]
+    function weighted_majority(w)
+
+        function main(out)
+            counts = Dict()
+            for i in 1:length(out)
+                item = out[i]
+                counts[item] = get(counts, item, 0) + w[i]
+            end
+
+            return findmax(counts)[2]
+
         end
 
-        return findmax(counts)[2]
+        return main
     end
 
 
@@ -401,6 +407,21 @@ module Apply
             return apply(ensemble, features, mean, take_label)
         elseif ensemble.method == "forest"
             return apply(ensemble, features, majority, take_label)
+        else
+            throw("ensemble type unknown: please pass "
+                * "explicit reducer and mapper as arguments.")
+        end
+    end
+
+
+    function apply(ensemble::Ensemble{S, T}, features::Array{S}) where {S, T}
+        if ensemble.method == "forest" && T <: Float64
+            return apply(ensemble, features, mean, take_label)
+        elseif ensemble.method == "forest"
+            return apply(ensemble, features, majority, take_label)
+        elseif ensemble.method == "adaboost"
+            weighted_maj = weighted_majority(ensemble.coeffs)
+            return apply(ensemble, features, weighted_maj, take_label)
         else
             throw("ensemble type unknown: please pass "
                 * "explicit reducer and mapper as arguments.")

@@ -7,16 +7,25 @@ include("measures.jl")
 import .Struct:
     Tree, Leaf, Node, Ensemble,
     is_leaf, depth, print_tree
+
 import .BuildTree:
     build_tree
+
 import .Forest:
     build_forest
+
+import .Boost.Adaptive:
+    build_adaboost
+
 import .Apply:
     apply
+
 import .Misc:
     load_data, prune_tree!
+
 import .Measures:
     confusion_matrix, ConfusionMatrix
+
 import .CrossValidate: 
     nfoldCV_tree, nfoldCV_forest
 
@@ -24,9 +33,10 @@ import .CrossValidate:
 #=
 
     to implement:
-        nfoldCV_stumps
-        build_adaboost,
-        apply_adaboost,
+        nfoldCV_adaboost,
+        build_gradientboost
+        apply_gradientboost
+        nfoldCV_gradientboost
 
     might-implement:
         apply_proba
@@ -38,14 +48,14 @@ import .CrossValidate:
 
 import Random
 X, Y = load_data("digits")
-build_tree(Y, X)
-build_forest(Y, X, n_trees=7, partial_sampling=0.7)
-@time ens = build_forest(Y, X, n_trees=50, partial_sampling=0.5)
 
-P = apply(ens, X)
-import .CrossValidate
-CrossValidate.nfoldCV_forest(
-    Y, X, 3; n_trees = 150, partial_sampling=0.5)
-@time output = CrossValidate.nfoldCV_forest(
-    Y, X, 3; n_trees = 150, partial_sampling=0.5)
-println(output)
+build_adaboost(Y, X, 7)
+build_tree(Y, X)
+
+@time ens = build_adaboost(Y, X, 150, partial_sampling=0.1)
+acc = sum(Y .== apply(ens, X))/length(Y)
+println("accuracy ", acc)
+
+for i in ens.coeffs
+    println(i)
+end

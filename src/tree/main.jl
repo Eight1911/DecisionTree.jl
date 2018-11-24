@@ -27,10 +27,10 @@ module BuildTree
         function main(tree, method)
             root = recurse(tree.root)
             if labels == nothing
-                return Tree(root, nothing, method)
+                return Tree{S, T}(root, nothing, method)
             else
                 labs = labels[tree.labels]
-                return Tree(root, labs, method)
+                return Tree{S, T}(root, labs, method)
             end
         end
 
@@ -57,10 +57,10 @@ module BuildTree
         function main(tree, labels, method)
             root = recurse(tree.root, tree.list)
             if labels == nothing
-                return Tree(root, nothing, method)
+                return Tree{S, T}(root, nothing, method)
             else
                 labs = labels[tree.labels]
-                return Tree(root, labs, method)
+                return Tree{S, T}(root, labs, method)
             end
         end
 

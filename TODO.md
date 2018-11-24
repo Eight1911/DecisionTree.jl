@@ -37,4 +37,5 @@ api and cleanliness
  * use range [0,1] for purity_thresh in new implementations of `prune_tree` (currently commented out)
  * standardize variable names to snake case
  * change `method` field in Tree/Ensemble to Symbol
- 
+ * make tests more modular
+ * store the number of classes and number of features in tree

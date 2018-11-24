@@ -119,8 +119,7 @@ module Forest
         n_samples = floor(Int, partial_sampling * t_samples)
         sampler   = BuildTree.Util.sampler(t_samples, n_samples, n_trees)
         forest    = Array{Struct.Tree{S, T}}(undef, n_trees)
-        # @sync Distributed.@distributed 
-        for i in 1:n_trees
+        @sync Distributed.@distributed for i in 1:n_trees
             indX = sampler(rng)
             root = BuildTree.Regressor._fit(
                 X                   = features, 
