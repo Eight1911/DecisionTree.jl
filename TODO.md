@@ -1,6 +1,6 @@
 bugs
 ----
- * bug in nfold_CV where all of input data is used to trained the model
+ * bug in nfold_CV where all of input data is used to train the model
  * add label vector compatability with Float32 for regression
  * increase the performance of current adaboost implementation
 
@@ -26,12 +26,15 @@ features
 
  * prune : post-pruning with validation data
 
+
 optimizations
 -------------
- * "compact" treeclassifier-esque leaves 
+ * "compact" treeclassifier-esque leaves
  * vectorize : change `nc[:] .= 0` to loops
 
 api and cleanliness
 -------------------
  * use range [0,1] for purity_thresh in new implementations of `prune_tree` (currently commented out)
  * standardize variable names to snake case
+ * change `method` field in Tree/Ensemble to Symbol
+ 

@@ -217,7 +217,6 @@ module Misc
 end
 
 
-
 module Apply
 
     import ..Struct: Ensemble, Tree, Leaf, Node, is_leaf

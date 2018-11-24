@@ -71,7 +71,7 @@ module Adaptive
         for i in 1:n_estimators
             tree       = fit(W, rng=rng)
             n_classes  = length(tree.list)
-            leaf_vals(tree, P)
+            leaf_vals(tree, indX, P)
             err, alpha = update_coeffs(Y, P, W, n_classes, learning_rate)
             push!(coeffs, alpha)
             push!(trees, tree)
@@ -149,7 +149,7 @@ module Adaptive
         n_trees             = 10,
         l_rate              = 0.05,
         partial_sampling    = 0.7,
-        n_subfeatures       = -1,
+        max_features        = -1,
         max_depth           = -1,
         min_samples_leaf    = 1,
         min_samples_split   = 2,
@@ -158,7 +158,6 @@ module Adaptive
 
         X = features
         Y = labels
-        max_features = n_subfeatures
         loss = "zero_one"
         list, _Y, fit = fitter(
             X, Y,

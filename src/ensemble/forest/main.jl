@@ -10,21 +10,21 @@ module Forest
 
     function build_forest(
             labels              :: Vector{T},
-            features            :: Matrix{S},
+            features            :: Matrix{S};
             n_trees             = 10,
             partial_sampling    = 0.7,
-            n_subfeatures       = -1,
+            max_features        = -1,
             max_depth           = -1,
             min_samples_leaf    = 1,
             min_samples_split   = 2,
-            min_purity_increase = 0.0;
+            min_purity_increase = 0.0,
             rng                 = Random.GLOBAL_RNG) where {S, T}
 
         t_samples = length(labels)
         weights   = ones(t_samples)
         BuildTree.Classifier.check_input(
             features, labels, weights,
-            n_subfeatures,
+            max_features,
             max_depth,
             min_samples_leaf,
             min_samples_split,
@@ -37,9 +37,9 @@ module Forest
             throw("partial_sampling must be in (0,1]")
         end
 
-        if n_subfeatures == -1
+        if max_features == -1
             n_features = size(features, 2)
-            n_subfeatures = round(Int, sqrt(n_features))
+            max_features = round(Int, sqrt(n_features))
         end
 
         rng       = Misc.mk_rng(rng)
@@ -56,23 +56,24 @@ module Forest
                 indX                = indX,
                 loss                = BuildTree.Util.entropy,
                 n_classes           = n_classes,
-                max_features        = Int(n_subfeatures),
+                max_features        = Int(max_features),
                 max_depth           = Int(max_depth),
                 min_samples_leaf    = Int(min_samples_leaf),
                 min_samples_split   = Int(min_samples_split),
                 min_purity_increase = Float64(min_purity_increase),
                 rng                 = rng)
-            # =#
+            # =# 
             root = BuildTree.Classifier._run(
                 features, Y, weights,
                 indX,
                 BuildTree.Util.entropy,
                 n_classes,
-                Int(n_subfeatures),
+                Int(max_features),
                 Int(max_depth),
                 Int(min_samples_leaf),
                 Int(min_samples_split),
-                Float64(min_purity_increase), rng)
+                Float64(min_purity_increase),
+                rng)
             tree = BuildTree.Classifier.Tree(root, list, indX)
             forest[i] = BuildTree.light_classifier(tree, labels, "entropy")
         end
@@ -82,21 +83,21 @@ module Forest
 
     function build_forest(
             labels              :: Vector{T},
-            features            :: Matrix{S},
+            features            :: Matrix{S};
             n_trees             = 10,
             partial_sampling    = 0.7,
-            n_subfeatures       = -1,
+            max_features        = -1,
             max_depth           = -1,
             min_samples_leaf    = 1,
             min_samples_split   = 2,
-            min_purity_increase = 0.0;
+            min_purity_increase = 0.0,
             rng                 = Random.GLOBAL_RNG) where {S, T <: Float64}
 
         t_samples = length(labels)
         weights   = ones(t_samples)
         BuildTree.Regressor.check_input(
             features, labels, weights,
-            n_subfeatures,
+            max_features,
             max_depth,
             min_samples_leaf,
             min_samples_split,
@@ -109,9 +110,9 @@ module Forest
             throw("partial_sampling must be in the range (0,1]")
         end
 
-        if n_subfeatures == -1
+        if max_features == -1
             n_features = size(features, 2)
-            n_subfeatures = round(Int, sqrt(n_features))
+            max_features = round(Int, sqrt(n_features))
         end
 
         rng       = Misc.mk_rng(rng)
@@ -127,7 +128,7 @@ module Forest
                 W                   = weights,
                 indX                = indX,
                 loss                = "none",
-                max_features        = Int(n_subfeatures),
+                max_features        = Int(max_features),
                 max_depth           = Int(max_depth),
                 min_samples_leaf    = Int(min_samples_leaf),
                 min_samples_split   = Int(min_samples_split),
